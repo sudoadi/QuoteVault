@@ -8,6 +8,8 @@ import '../../main.dart';
 import '../profile/profile_page.dart';
 import 'quotes_page.dart';
 import 'quote_share_sheet.dart';
+// 1. Import the WidgetManager
+import '../../managers/widget_manager.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -53,6 +55,7 @@ class _HomePageState extends State<HomePage> {
         final dayOfYear = diff.inDays;
         final dailyIndex = dayOfYear % countResponse;
 
+        // 1. Fetch the Daily Quote
         final data = await supabase
             .from('quotes')
             .select()
@@ -64,6 +67,29 @@ class _HomePageState extends State<HomePage> {
             _dailyQuote = data;
           });
           _fetchDailyQuoteStatus(data['id']);
+
+          // 2. Fetch Poster Images for the Widget
+          List<String> posterUrls = [];
+          try {
+            final posterResponse = await supabase
+                .from('posters')
+                .select('image_url');
+
+            posterUrls = (posterResponse as List)
+                .map((e) => e['image_url'] as String)
+                .toList();
+          } catch (e) {
+            debugPrint("Error fetching posters for widget: $e");
+          }
+
+          // 3. Update the Home Screen Widget
+          // We pass the quote, author, AND the list of images so the widget
+          // can pick a random background.
+          await WidgetManager.updateWidget(
+            quote: data['content'],
+            author: data['author'],
+            posterUrls: posterUrls,
+          );
         }
       }
     } catch (e) {
@@ -210,10 +236,8 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // === NEW: CLICKABLE TITLE ===
         title: GestureDetector(
           onTap: () {
-            // Reset to Landing Page
             _pageController.animateToPage(
                 0,
                 duration: const Duration(milliseconds: 600),
@@ -274,7 +298,6 @@ class _HomePageState extends State<HomePage> {
               _scrollPhysics = const NeverScrollableScrollPhysics();
             });
           } else {
-            // Re-enable scrolling if we go back to landing
             setState(() {
               _scrollPhysics = const BouncingScrollPhysics();
             });
@@ -345,10 +368,8 @@ class HomeLandingView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // === 1. PUSH DOWN (Center Group) ===
               const Spacer(flex: 2),
 
-              // === 2. TITLE ===
               RichText(
                 textAlign: TextAlign.center,
                 text: TextSpan(
@@ -360,10 +381,8 @@ class HomeLandingView extends StatelessWidget {
                 ),
               ),
 
-              // === 3. CLOSER SPACING ===
               const SizedBox(height: 40),
 
-              // === 4. FUNKY DAILY QUOTE BOX ===
               if (dailyQuote != null)
                 DailyQuoteBox(
                   quoteContent: dailyQuote!['content'],
@@ -389,10 +408,8 @@ class HomeLandingView extends StatelessWidget {
                   child: Center(child: CircularProgressIndicator(color: accentColor)),
                 ),
 
-              // === 5. BOTTOM SPACER ===
               const Spacer(flex: 3),
 
-              // Scroll Indicator
               GestureDetector(
                 onTap: onScrollDown,
                 child: Column(

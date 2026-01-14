@@ -1,0 +1,24 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/rounded_background"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/widget_quote_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:textColor="#FFFFFF"
+        android:text="Quote..." />
+
+    <TextView
+        android:id="@+id/widget_author_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_quote_text"
+        android:textColor="#DDDDDD"
+        android:text="- Author" />
+
+</RelativeLayout>
