@@ -98,8 +98,8 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
               ),
             ),
 
-          // Overlay to make text readable
-          Container(color: Colors.black.withOpacity(0.3)),
+          // Overlay to make text readable (Optional, reduced opacity so video pops more)
+          Container(color: Colors.black.withOpacity(0.2)),
 
           // === LAYER 2: FUNKY BOTTOM SHEET ===
           Positioned(
@@ -109,7 +109,8 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
             child: SlideTransition(
               position: _slideAnimation,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(30, 40, 30, 50),
+                // Reduced padding to make the sheet shorter
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                 decoration: const BoxDecoration(
                   color: Color(0xFFF1C40F), // The "Funky" Yellow
                   borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
@@ -119,10 +120,6 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
                     left: BorderSide(color: Colors.black, width: 4),
                     right: BorderSide(color: Colors.black, width: 4),
                   ),
-                  // Funky Hard Shadow (simulated with container below usually, but boxShadow works too)
-                  boxShadow: [
-                    BoxShadow(color: Colors.black, offset: Offset(0, -10), blurRadius: 0) // Negative offset for shadow "behind" going up? No, let's keep it clean inside.
-                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -131,15 +128,15 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
                     // Decoration Line
                     Center(
                       child: Container(
-                        width: 60,
-                        height: 6,
+                        width: 40,
+                        height: 5,
                         decoration: BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(3),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 15), // Reduced spacing
 
                     // Title
                     FadeTransition(
@@ -147,7 +144,7 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
                       child: const Text(
                         'Welcome',
                         style: TextStyle(
-                          fontSize: 42,
+                          fontSize: 32, // Reduced from 42
                           fontWeight: FontWeight.w900,
                           color: Colors.black,
                           height: 1.0,
@@ -155,22 +152,22 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
                         ),
                       ),
                     ),
-                    const SizedBox(height: 15),
+                    const SizedBox(height: 8), // Reduced spacing
 
                     // Subtitle
                     FadeTransition(
                       opacity: _fadeAnimation,
                       child: const Text(
-                        'Your personal vault for the world\'s greatest quotes. Capture, organize, and get inspired.',
+                        'Your personal vault for the world\'s greatest quotes. \n Capture, Organise and get inspired.',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 14, // Reduced from 16
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
-                          height: 1.4,
+                          height: 1.3,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 24), // Reduced spacing before buttons
 
                     // Buttons Row
                     Row(
@@ -186,7 +183,7 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
                             );
                           }),
                         ),
-                        const SizedBox(width: 20),
+                        const SizedBox(width: 16),
 
                         // SIGN UP (White)
                         Expanded(
@@ -201,6 +198,8 @@ class _LandingPageState extends State<LandingPage> with SingleTickerProviderStat
                         ),
                       ],
                     ),
+                    // Safe area padding for newer iPhones/Androids with gesture bars
+                    SizedBox(height: MediaQuery.of(context).padding.bottom > 0 ? 10 : 0),
                   ],
                 ),
               ),
