@@ -1,8 +1,47 @@
+import 'dart:math';
+import 'dart:ui'; // Required for ImageFilter
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
-import 'quote_share_sheet.dart'; // <--- Kept Sharing Import
-import '../../managers/app_settings.dart'; // <--- New Import
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'quote_share_sheet.dart';
+import '../../managers/app_settings.dart';
+
+// --- 1. POSTER MANAGER (Reactive Singleton) ---
+// Now uses ValueNotifier so cards update automatically when data arrives
+class PosterManager {
+  static final PosterManager _instance = PosterManager._internal();
+  factory PosterManager() => _instance;
+  PosterManager._internal();
+
+  // Notifies listeners (the cards) when the list updates
+  final ValueNotifier<List<String>> postersNotifier = ValueNotifier([]);
+  bool _isFetching = false;
+
+  void fetchPosters() async {
+    // If we already have data or are currently loading, do nothing
+    if (postersNotifier.value.isNotEmpty || _isFetching) return;
+
+    _isFetching = true;
+    try {
+      final response = await Supabase.instance.client
+          .from('posters')
+          .select('image_url');
+
+      final data = response as List<dynamic>;
+      final List<String> urls = data.map((row) => row['image_url'] as String).toList();
+
+      // Update the notifier! This triggers the UI update in all cards
+      postersNotifier.value = urls;
+
+      debugPrint("✅ PosterManager: Loaded ${urls.length} posters.");
+    } catch (e) {
+      debugPrint("❌ PosterManager Error: $e");
+    } finally {
+      _isFetching = false;
+    }
+  }
+}
 
 class QuoteCard extends StatefulWidget {
   final String quote;
@@ -44,9 +83,13 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
   late AnimationController _heartController;
   late Animation<double> _heartScale;
 
+  // Default fallback image
+  static const String _fallbackUrl = "https://raw.githubusercontent.com/sudoadi/QuoteVault/refs/heads/main/posters/poster%20(1).png";
+
   @override
   void initState() {
     super.initState();
+
     _heartController = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 300)
@@ -54,6 +97,17 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
     _heartScale = Tween<double>(begin: 0.0, end: 1.2).animate(
         CurvedAnimation(parent: _heartController, curve: Curves.elasticOut)
     );
+
+    // Trigger the fetch if needed
+    PosterManager().fetchPosters();
+  }
+
+  // Helper to pick a consistent image for this quote
+  String _getUniqueImage(List<String> posters) {
+    if (posters.isEmpty) return _fallbackUrl;
+    // Use hash to ensure the same quote always gets the same image from the list
+    final int index = widget.quote.hashCode.abs() % posters.length;
+    return posters[index];
   }
 
   void _handleDoubleTap() {
@@ -64,18 +118,6 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
     });
   }
 
-  Color _getCategoryColor(String cat) {
-    switch (cat.toLowerCase()) {
-      case 'motivation': return const Color(0xFFFFD700);
-      case 'love': return const Color(0xFFFF6B6B);
-      case 'wisdom': return const Color(0xFF5D9CEC);
-      case 'humor': return const Color(0xFFFF9F43);
-      case 'success': return const Color(0xFF2ECC71);
-      default: return widget.accentColor;
-    }
-  }
-
-  // === PRESERVED: Share Sheet Logic ===
   void _openShareSheet() {
     showModalBottomSheet(
       context: context,
@@ -91,8 +133,7 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    final catColor = _getCategoryColor(widget.category);
-
+    // Determine 3D tilt colors
     Color? overlayColor;
     double opacity = 0.0;
     if (widget.percentX.abs() > 0 || widget.percentY.abs() > 0) {
@@ -111,6 +152,7 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
       onLongPress: widget.onLongPress,
       child: Stack(
         children: [
+          // 1. MAIN CARD SHAPE
           Container(
             decoration: BoxDecoration(
               color: widget.cardColor,
@@ -125,129 +167,61 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(30),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Expanded(
-                    flex: 4,
+                  // 2. BACKGROUND IMAGE (Reactive!)
+                  // Listens to the PosterManager. If list updates, this rebuilds.
+                  ValueListenableBuilder<List<String>>(
+                    valueListenable: PosterManager().postersNotifier,
+                    builder: (context, posters, _) {
+                      final imageUrl = _getUniqueImage(posters);
+
+                      return Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        // Smooth Fade In to prevent "pop"
+                        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                          if (wasSynchronouslyLoaded) return child;
+                          return AnimatedOpacity(
+                            opacity: frame == null ? 0 : 1,
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeOut,
+                            child: child,
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) => Container(color: widget.cardColor),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(color: widget.cardColor);
+                        },
+                      );
+                    },
+                  ),
+
+                  // 3. FROSTED GLASS & GRADIENT
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 250,
                     child: Stack(
-                      fit: StackFit.expand,
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [catColor, catColor.withOpacity(0.4)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: -50,
-                          bottom: -50,
-                          child: Icon(
-                            Icons.format_quote_rounded,
-                            size: 200,
-                            color: Colors.white.withOpacity(0.15),
-                          ),
-                        ),
-                        Positioned(
-                          top: 16,
-                          left: 16,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.2)),
-                            ),
-                            child: Text(
-                              widget.category.toUpperCase(),
-                              style: GoogleFonts.spaceMono(
-                                color: catColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 16,
-                          right: 16,
-                          child: GestureDetector(
-                            onTap: widget.onBookmark,
+                        ClipRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
                             child: Container(
-                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                widget.isBookmarked ? Icons.bookmark : Icons.bookmark_border_rounded,
-                                color: widget.isBookmarked ? widget.accentColor : Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 16,
-                          right: 16,
-                          child: Row(
-                            children: [
-                              GestureDetector(
-                                onTap: _openShareSheet, // <--- PRESERVED: Share Action
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.share_rounded, color: Colors.white, size: 24),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withOpacity(0.4),
+                                    Colors.black.withOpacity(0.9),
+                                  ],
+                                  stops: const [0.0, 0.3, 1.0],
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              GestureDetector(
-                                onTap: () {
-                                  widget.onFavorite?.call();
-                                  _heartController.forward(from: 0.0).then((_) => _heartController.reverse());
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                      widget.isFavorite ? Icons.favorite : Icons.favorite_border_rounded,
-                                      color: widget.isFavorite ? widget.accentColor : Colors.white,
-                                      size: 24
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Center(
-                          child: ScaleTransition(
-                            scale: _heartScale,
-                            child: const Icon(Icons.favorite, color: Colors.white, size: 100),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 16,
-                          left: 16,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.8),
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            child: Text(
-                              "DAILY TRUTH",
-                              style: GoogleFonts.spaceMono(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
@@ -255,58 +229,164 @@ class _QuoteCardState extends State<QuoteCard> with SingleTickerProviderStateMix
                       ],
                     ),
                   ),
-                  Expanded(
-                    flex: 3,
+
+                  // 4. TOP BAR
+                  Positioned(
+                    top: 20,
+                    left: 20,
                     child: Container(
-                      padding: const EdgeInsets.all(24),
-                      color: widget.cardColor,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Center(
-                              child: SingleChildScrollView(
-                                child: ValueListenableBuilder<double>( // <--- NEW: Dynamic Font Size Listener
-                                  valueListenable: AppSettings().quoteFontSizeNotifier,
-                                  builder: (context, scale, child) {
-                                    return Text(
-                                      '"${widget.quote}"',
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.notoSans(
-                                        color: widget.textColor,
-                                        fontSize: 22 * scale, // <--- Apply Scaling
-                                        fontWeight: FontWeight.w800,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      ),
+                      child: Text(
+                        widget.category.toUpperCase(),
+                        style: GoogleFonts.spaceMono(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 20,
+                    right: 20,
+                    child: GestureDetector(
+                      onTap: widget.onBookmark,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          widget.isBookmarked ? Icons.bookmark : Icons.bookmark_border_rounded,
+                          color: widget.isBookmarked ? widget.accentColor : Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // 5. MAIN CONTENT
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    bottom: 90,
+                    top: 100,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: ValueListenableBuilder<double>(
+                              valueListenable: AppSettings().quoteFontSizeNotifier,
+                              builder: (context, scale, child) {
+                                return Text(
+                                  '"${widget.quote}"',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.notoSans(
+                                    color: Colors.white,
+                                    fontSize: 24 * scale,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.3,
+                                    shadows: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.5),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.edit_outlined, color: catColor, size: 18),
-                              const SizedBox(width: 8),
-                              Text(
-                                widget.author,
-                                style: GoogleFonts.spaceMono(
-                                  color: widget.textColor.withOpacity(0.8),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          "- ${widget.author}",
+                          style: GoogleFonts.spaceMono(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 6. BOTTOM ACTIONS
+                  Positioned(
+                    bottom: 24,
+                    left: 24,
+                    right: 24,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        GestureDetector(
+                          onTap: _openShareSheet,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(color: Colors.white.withOpacity(0.1)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Share",
+                                  style: GoogleFonts.spaceMono(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        GestureDetector(
+                          onTap: () {
+                            widget.onFavorite?.call();
+                            _heartController.forward(from: 0.0).then((_) => _heartController.reverse());
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: widget.isFavorite ? Colors.white : Colors.white.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              widget.isFavorite ? Icons.favorite : Icons.favorite_border_rounded,
+                              color: widget.isFavorite ? widget.accentColor : Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 7. ANIMATION
+                  Center(
+                    child: ScaleTransition(
+                      scale: _heartScale,
+                      child: const Icon(Icons.favorite, color: Colors.white, size: 100),
                     ),
                   ),
                 ],
               ),
             ),
           ),
+
           if (overlayColor != null)
             Positioned.fill(
               child: ClipRRect(
