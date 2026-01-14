@@ -49,10 +49,11 @@ dependencies:
   screenshot: ^3.0.0
   path_provider: ^2.1.5
   gal: ^2.3.2
-  timezone: ^0.10.1
-  flutter_timezone: ^5.0.1
+  timezone:
   home_widget: ^0.9.0
   http:
+  flutter_local_notifications:
+  flutter_timezone:
 
 dev_dependencies:
   flutter_test:

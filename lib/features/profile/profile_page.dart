@@ -8,7 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../main.dart';
-import '../../managers/app_settings.dart'; // <--- Import Settings Manager
+import '../../managers/app_settings.dart';
+import '../../managers/notification_manager.dart';
 import '../landing/landing_page.dart';
 import '../auth/funky_widgets.dart';
 
@@ -33,7 +34,11 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   bool _isDarkMode = false;
   int _themeColorIndex = 0;
   double _uiFontSize = 1.0;
-  double _quoteFontSize = 1.0; // <--- NEW: Quote Size State
+  double _quoteFontSize = 1.0;
+
+  // Notification State
+  bool _notificationsEnabled = false;
+  TimeOfDay _notificationTime = const TimeOfDay(hour: 9, minute: 0);
 
   // Animation State
   late AnimationController _flipController;
@@ -79,7 +84,14 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         _isDarkMode = prefs.getBool('darkMode') ?? false;
         _themeColorIndex = prefs.getInt('themeIndex') ?? 0;
         _uiFontSize = prefs.getDouble('fontSize') ?? 1.0;
-        _quoteFontSize = prefs.getDouble('quoteFontSize') ?? 1.0; // <--- Load Quote Size
+        _quoteFontSize = prefs.getDouble('quoteFontSize') ?? 1.0;
+
+        // Load Notifications
+        _notificationsEnabled = prefs.getBool('notifications_enabled') ?? false;
+        final hour = prefs.getInt('notification_hour') ?? 9;
+        final minute = prefs.getInt('notification_minute') ?? 0;
+        _notificationTime = TimeOfDay(hour: hour, minute: minute);
+
         _email = user.email ?? "No Email";
 
         // Sync Global State
@@ -101,7 +113,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             _isDarkMode = settings['darkMode'] ?? _isDarkMode;
             _themeColorIndex = settings['themeIndex'] ?? _themeColorIndex;
             _uiFontSize = (settings['fontSize'] as num?)?.toDouble() ?? _uiFontSize;
-            _quoteFontSize = (settings['quoteFontSize'] as num?)?.toDouble() ?? _quoteFontSize; // <--- DB Sync
+            _quoteFontSize = (settings['quoteFontSize'] as num?)?.toDouble() ?? _quoteFontSize;
             _saveLocalSettings();
 
             AppSettings().updateUiFontSize(_uiFontSize);
@@ -125,7 +137,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
       }
       if (quoteFontSize != null) {
         _quoteFontSize = quoteFontSize;
-        AppSettings().updateQuoteFontSize(quoteFontSize); // <--- Update Global
+        AppSettings().updateQuoteFontSize(quoteFontSize);
       }
     });
     await _saveLocalSettings();
@@ -137,11 +149,60 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             'darkMode': _isDarkMode,
             'themeIndex': _themeColorIndex,
             'fontSize': _uiFontSize,
-            'quoteFontSize': _quoteFontSize // <--- Update DB
+            'quoteFontSize': _quoteFontSize
           }
         }).eq('id', user.id);
       } catch (e) { /* silent fail */ }
     }
+  }
+
+  Future<void> _toggleNotifications(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() => _notificationsEnabled = value);
+    await prefs.setBool('notifications_enabled', value);
+
+    if (value) {
+      await NotificationManager().requestPermissions();
+      await NotificationManager().scheduleDailyNotification(_notificationTime);
+    } else {
+      await NotificationManager().cancelNotifications();
+    }
+  }
+
+  Future<void> _pickNotificationTime() async {
+    if (!_notificationsEnabled) return;
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _notificationTime,
+      builder: (context, child) {
+        final Color accentColor = _themeColors[_themeColorIndex];
+        return Theme(
+          data: _isDarkMode
+              ? ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(primary: accentColor, onPrimary: Colors.white, surface: const Color(0xFF2C2C2C), onSurface: Colors.white),
+          )
+              : ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: accentColor, onPrimary: Colors.white),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _notificationTime) {
+      setState(() => _notificationTime = picked);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('notification_hour', picked.hour);
+      await prefs.setInt('notification_minute', picked.minute);
+      await NotificationManager().scheduleDailyNotification(picked);
+    }
+  }
+
+  // === NEW: Test Notification Action ===
+  Future<void> _testNotification() async {
+    await NotificationManager().showTestNotification();
+    if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Notification sent! (Check status bar)")));
   }
 
   Future<void> _saveLocalSettings() async {
@@ -151,9 +212,6 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     await prefs.setDouble('fontSize', _uiFontSize);
     await prefs.setDouble('quoteFontSize', _quoteFontSize);
   }
-
-  // ... (Keep existing methods: _updateProfileField, _showEditDialog, _resetPassword, _logout, _pickAndUploadImage, _removePhoto, _showExpandedAvatar, _showEditOverlay, _buildFrontCard, _buildEditableIDCard, _buildBackCard, _buildRealisticSwitch)
-  // [Truncated for brevity - ensure you keep the existing implementations of these methods]
 
   Future<void> _updateProfileField(String field, String value) async {
     final user = supabase.auth.currentUser;
@@ -255,7 +313,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
       Column(children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Row(children: [GestureDetector(onTap: _toggleFlip, child: Container(padding: const EdgeInsets.all(5), decoration: BoxDecoration(color: accentColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Icon(Icons.qr_code_scanner, size: 30, color: textColor))), const SizedBox(width: 10), GestureDetector(onTap: _showEditOverlay, child: Container(padding: const EdgeInsets.all(5), decoration: BoxDecoration(color: textColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(Icons.edit, size: 20, color: textColor)))]),
-          Text("QUOTEVAULT ID", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w900, letterSpacing: 2))
+          const Text("QUOTEVAULT ID", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w900, letterSpacing: 2))
         ]),
         const SizedBox(height: 15),
         Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -344,7 +402,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(24), border: Border.all(color: textColor.withOpacity(0.1), width: 1), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))]),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text("PREFERENCES", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.grey, letterSpacing: 1.5)),
+                const Text("PREFERENCES", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.grey, letterSpacing: 1.5)),
                 const SizedBox(height: 20),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Interface Mode", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18 * _uiFontSize, color: textColor)), _buildRealisticSwitch()]),
                 const SizedBox(height: 20),
@@ -359,9 +417,67 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
                 const SizedBox(height: 10),
 
-                // === NEW: Quote Text Size Slider ===
+                // Quote Text Size Slider
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Quote Text Size", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18 * _uiFontSize, color: textColor)), Text("${(_quoteFontSize * 100).round()}%", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: accentColor))]),
                 SliderTheme(data: SliderTheme.of(context).copyWith(activeTrackColor: accentColor, thumbColor: accentColor, inactiveTrackColor: accentColor.withOpacity(0.2), trackHeight: 4), child: Slider(value: _quoteFontSize, min: 0.8, max: 2.0, divisions: 12, onChanged: (val) => _updateSetting(quoteFontSize: val))),
+
+                const SizedBox(height: 20),
+
+                // === NOTIFICATION SETTINGS UI ===
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Daily Quote", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18 * _uiFontSize, color: textColor)),
+                    Switch(
+                        value: _notificationsEnabled,
+                        activeColor: accentColor,
+                        onChanged: _toggleNotifications
+                    ),
+                  ],
+                ),
+                if (_notificationsEnabled) ...[
+                  const SizedBox(height: 10),
+                  // NEW: Time and Test Button Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _pickNotificationTime,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                                color: accentColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: accentColor.withOpacity(0.3))
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.access_time, size: 18, color: accentColor),
+                                const SizedBox(width: 8),
+                                Text("Time: ${_notificationTime.format(context)}", style: TextStyle(fontWeight: FontWeight.bold, color: accentColor)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // TEST BUTTON
+                      GestureDetector(
+                        onTap: _testNotification,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                              color: Colors.grey.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey.withOpacity(0.5))
+                          ),
+                          child: Text("TEST", style: TextStyle(fontWeight: FontWeight.bold, color: textColor.withOpacity(0.8))),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ]),
             ),
             const SizedBox(height: 20),

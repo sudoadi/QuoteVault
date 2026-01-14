@@ -9,6 +9,7 @@ import 'features/landing/landing_page.dart';
 import 'features/auth/update_password_page.dart';
 import 'features/profile/public_profile_page.dart';
 import 'utils/circular_reveal_transition.dart';
+import 'managers/notification_manager.dart'; // <--- NEW IMPORT
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool isPasswordRecovery = false;
@@ -17,10 +18,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // === DISABLE RED SCREEN OF DEATH ===
-  // This hides layout overflow errors from the user's screen
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return const SizedBox();
   };
+
+  // 1. Initialize Notification Manager (Local Push)
+  await NotificationManager().init();
 
   await Supabase.initialize(
     url: 'https://ehsyawhjbydmwhsyuqpf.supabase.co',
