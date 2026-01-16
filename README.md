@@ -1,16 +1,54 @@
-# quotevault
+# QuoteVault 🚀
+ Check Releases for apk builds.
+ 
+A modern, high-performance Flutter application for discovering, collecting, and sharing daily wisdom. Features a futuristic UI, Home Screen Widgets, and Local Notifications.
 
-project for brewapps
+## 🌟 Features
 
-## Getting Started
+* **Daily Inspiration**: A new quote every day, synced with Supabase.
+* **Home Screen Widget**: View your daily quote directly from your Android home screen.
+* **Interactive Notifications**: Get daily alerts with "Open" and "Like" actions.
+* **Agent Profile**: A gamified profile card with flip animation and QR code sharing.
+* **Collections**: Bookmark quotes into custom collections.
+* **Dynamic Theming**: Custom signature colors and dark/light mode toggle.
 
-This project is a starting point for a Flutter application.
+## 🛠 Tech Stack
 
-A few resources to get you started if this is your first Flutter project:
+* **Framework**: Flutter (Dart)
+* **Backend**: Supabase (PostgreSQL, Auth, Storage)
+* **State Management**: `setState` & `ValueNotifier`
+* **Local Data**: `shared_preferences`
+* **Native Integration**: `home_widget` (Android XML), `flutter_local_notifications`
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 🚀 Setup Instructions
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 1. Prerequisites
+* Flutter SDK (3.0+)
+* Android Studio / VS Code
+* Supabase Account
+
+### 2. Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/yourusername/quotevault.git](https://github.com/yourusername/quotevault.git)
+    cd quotevault
+    ```
+
+2.  **Install Dependencies:**
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Configure Supabase:**
+    * Open `lib/config/constants.dart`.
+    * Replace `supabaseUrl` and `supabaseAnonKey` with your project credentials.
+
+4.  **Run the App:**
+    ```bash
+    flutter run
+    ```
+
+## 📱 Architecture
+
+The project follows a modular, feature-first architecture:
